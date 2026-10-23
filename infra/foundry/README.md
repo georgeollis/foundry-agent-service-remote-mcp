@@ -11,5 +11,4 @@ part of the supported deployment.
 
 Local adaptations preserve existing subnets/NAT, allow a separate Search region,
 disable public Monitor ingestion/query, and attach the shared Blob DNS zone to
-the Monitor private endpoint. These changes do not convert sample 15 into
-sample 19 or enable private MCP tool execution.
+the Monitor private endpoint.

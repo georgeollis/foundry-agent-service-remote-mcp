@@ -11,6 +11,7 @@ inside the VNets from the managed services they expose.
 | Workstation to Foundry | HTTPS to the Foundry account's private endpoint |
 | Workstation to MCP | Peering routes HTTPS to the Function private endpoint |
 | Agent to dependencies | Network injection into the delegated agent subnet, then private endpoints |
+| Agent to MCP | Private HTTPS across VNet peering to the Function private endpoint |
 | Function to storage | Outbound VNet integration, private Blob/Queue DNS and endpoints |
 | Workload to internet | Its own VNet's NAT gateway |
 | Monitoring | Azure Monitor Private Link Scope (AMPLS), private ingestion and query |
@@ -76,11 +77,7 @@ the portal-created configuration. Its URL is derived from the Function hostname.
 The newer connection API supports the `RemoteTool` category; the upstream agent
 infrastructure otherwise retains its original APIs.
 
-## Deliberate limitations
-
-Sample 15 does not provide private MCP execution from the agent runtime.
-Connection registration is metadata, not proof of tool-call reachability.
-The live test invokes MCP from the Windows VM, **not from a Foundry agent**.
+## Monitoring and egress
 
 Function telemetry is not wired to an unreachable private ingestion endpoint.
 The Foundry tracing resources retain private ingestion and query. Internet

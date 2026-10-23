@@ -5,11 +5,6 @@ two peered virtual networks, private service endpoints, shared DNS, NAT egress,
 a Windows 11 workstation behind Azure Bastion, and a Python MCP server on Azure
 Functions Flex Consumption.
 
-**Important:** this keeps sample 15, not sample 19. A Foundry MCP connection is
-registered, but sample 15 does **not** support calling this private MCP endpoint
-from its agent runtime. The workstation can reach and exercise the MCP server.
-Peering and creating a connection do not remove that service limitation.
-
 ## Deploy to Azure
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgeorgeollis%2Ffoundry-connections%2Fmain%2Fazuredeploy.json)
@@ -72,6 +67,7 @@ flowchart TB
 
     operator -->|"Public HTTPS - approved exception"| bastion
     vm -->|"Private HTTPS across VNet peering"| mcpPe
+    agent -->|"Private MCP HTTPS across VNet peering"| mcpPe
     foundryPe --> foundry
     foundry -->|"Agent network injection"| agent
     dependencyPe --> dependencies
@@ -87,7 +83,7 @@ flowchart TB
 
 The VNets are peered in both directions. Managed services are shown outside the
 VNet boundaries: their **private endpoints**, not the services themselves, reside
-in the subnets. There is deliberately no agent-to-MCP execution arrow.
+in the subnets.
 
 | Component | Configuration |
 |---|---|

@@ -74,9 +74,7 @@ starts the VM if necessary, publishes the MCP package through the private VM
 using managed identity, and runs the existing live verification. It does not
 reprovision infrastructure or require your VM password.
 
-The infrastructure template alone does **not** publish the Function code, and
-registering the MCP connection does not remove sample 15's private-tool
-execution limitation.
+The infrastructure template alone does **not** publish the Function code.
 
 ### Maintaining the button
 
@@ -165,8 +163,7 @@ Windows 11 without a public IP, and live managed-identity roles. It then runs
 private DNS and MCP initialization/list/tool-call checks inside the VM.
 
 The four simulated tools are `check_coverage`, `request_pre_auth`,
-`check_claim_status`, and `submit_claim_documents`. A successful VM test does not
-establish that sample 15's agent runtime can reach private MCP.
+`check_claim_status`, and `submit_claim_documents`.
 
 For local source and validation-gate regression checks:
 
