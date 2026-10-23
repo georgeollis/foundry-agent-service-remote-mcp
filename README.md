@@ -1,4 +1,4 @@
-# Private Microsoft Foundry and pet-insurance MCP
+# Microsoft Foundry Agent Service - Remote MCP
 
 A reproducible development environment based on Microsoft Foundry **sample 15**:
 two peered virtual networks, private service endpoints, shared DNS, NAT egress,
@@ -7,7 +7,7 @@ Functions Flex Consumption.
 
 ## Deploy to Azure
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgeorgeollis%2Ffoundry-connections%2Fmain%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgeorgeollis%2Ffoundry-agent-service-remote-mcp%2Fmain%2Fazuredeploy.json)
 
 Deploy the infrastructure from Azure Portal, without running Bicep locally:
 
@@ -160,8 +160,8 @@ quota. Review the [provider and quota prerequisites](docs/deployment.md#prerequi
 first.
 
 ```powershell
-git clone https://github.com/georgeollis/foundry-connections.git
-Set-Location .\foundry-connections
+git clone https://github.com/georgeollis/foundry-agent-service-remote-mcp.git
+Set-Location .\foundry-agent-service-remote-mcp
 
 $subscription = '<subscription-id>'
 $environment = '<environment-name>'

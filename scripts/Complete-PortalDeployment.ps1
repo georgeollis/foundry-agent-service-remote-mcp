@@ -18,7 +18,7 @@ foreach ($name in @('subscriptionId', 'deployedEnvironmentName', 'resourceGroupN
     'functionName', 'functionHostname', 'mcpEndpoint', 'foundryProjectEndpoint',
     'foundryAccountName', 'foundryProjectName', 'foundryVnetName', 'functionVnetName', 'tenantId')) {
     if ([string]::IsNullOrWhiteSpace($outputs.$name.value)) {
-        throw "Not a complete foundry-connections deployment: missing output $name."
+        throw "Not a complete Foundry Agent Service Remote MCP deployment: missing output $name."
     }
 }
 if ($outputs.subscriptionId.value -ne $SubscriptionId) { throw 'Deployment output subscription does not match.' }
