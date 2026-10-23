@@ -2,10 +2,13 @@ targetScope = 'subscription'
 
 @description('Primary region for the networks, Foundry, Function app, and workstation.')
 param location string = 'swedencentral'
+@description('A new environment name: 3-40 lowercase letters, numbers, or hyphens.')
 param environmentName string = 'foundry-private-poc'
+@description('Your Microsoft Entra user object ID in the selected subscription tenant, not your email or tenant ID.')
 param operatorPrincipalId string
 param vmAdminUsername string = 'azureadmin'
 @secure()
+@description('Windows VM administrator password. Use a strong password and keep it safe; portal deployment does not create a local credential file.')
 param vmAdminPassword string
 param vmSize string = 'Standard_D2s_v5'
 param modelName string = 'gpt-4.1'

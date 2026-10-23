@@ -8,6 +8,11 @@ $mockAzure = [pscustomobject]@{
     createdDeployments = 0
     failValidation = $false
     tenant = 'test-tenant'
+    portalState = 'Succeeded'
+    portalSubscription = 'test-subscription'
+    portalEnvironment = 'test-environment'
+    portalMissingOutput = $false
+    completed = [Collections.Generic.List[string]]::new()
 }
 $previousOperator = $env:AZURE_OPERATOR_OBJECT_ID
 $previousEnvironment = $env:AZURE_ENVIRONMENT_NAME
@@ -34,6 +39,30 @@ function az {
             return '{}'
         }
         '^deployment sub what-if' { return '{"changes":[]}' }
+        '^deployment sub show' {
+            $portalOutputs = @{
+                subscriptionId = @{ value = $mockAzure.portalSubscription }
+                deployedEnvironmentName = @{ value = $mockAzure.portalEnvironment }
+                resourceGroupName = @{ value = 'test-resource-group' }
+                vmName = @{ value = 'test-vm' }
+                functionName = @{ value = 'test-function' }
+                functionHostname = @{ value = 'mcp.example.invalid' }
+                mcpEndpoint = @{ value = 'https://mcp.example.invalid' }
+                foundryProjectEndpoint = @{ value = 'https://foundry.example.invalid' }
+                foundryAccountName = @{ value = 'test-foundry-account' }
+                foundryProjectName = @{ value = 'test-foundry-project' }
+                foundryVnetName = @{ value = 'test-foundry-vnet' }
+                functionVnetName = @{ value = 'test-function-vnet' }
+                tenantId = @{ value = $mockAzure.tenant }
+            }
+            if ($mockAzure.portalMissingOutput) { $portalOutputs.Remove('functionName') }
+            return (@{
+                properties = @{
+                    provisioningState = $mockAzure.portalState
+                    outputs = $portalOutputs
+                }
+            } | ConvertTo-Json -Depth 10)
+        }
         '^feature show' { return 'Registered' }
         '^provider show' { return 'Registered' }
         '^deployment sub create' {
@@ -91,7 +120,37 @@ try {
     Assert-Rejected { & $deploy @arguments -Action Deploy } 'Run Deploy.ps1 -Action Validate'
     if ($mockAzure.createdDeployments -ne 1) { throw 'A rejected deployment invoked provisioning.' }
 
-    Write-Output 'PASS: validation required; matching inputs deploy; parameter/tenant/source drift rejected; failed validation invalidates receipt; no password in receipt.'
+    $complete = Join-Path $testRoot 'scripts\Complete-PortalDeployment.ps1'
+    Copy-Item (Join-Path $PSScriptRoot 'Complete-PortalDeployment.ps1') $complete
+    Set-Content (Join-Path $testRoot 'scripts\Publish-Mcp.ps1') @'
+param([string]$SubscriptionId, [string]$OutputsPath)
+$mockAzure.completed.Add('publish')
+'@
+    Set-Content (Join-Path $testRoot 'scripts\Test-Deployment.ps1') @'
+param([string]$SubscriptionId, [string]$OutputsPath)
+$mockAzure.completed.Add('verify')
+'@
+    $portalArguments = @{ SubscriptionId = 'test-subscription'; DeploymentName = 'portal-deployment' }
+    & $complete @portalArguments | Out-Null
+    if (($mockAzure.completed -join ',') -ne 'publish,verify') { throw 'Portal completion did not publish then verify.' }
+    $imported = Get-Content (Join-Path $state 'deployment-outputs.json') -Raw | ConvertFrom-Json
+    if ($imported.subscriptionId.value -ne 'test-subscription') { throw 'Portal outputs were not imported.' }
+
+    $mockAzure.completed.Clear()
+    $mockAzure.portalState = 'Running'
+    Assert-Rejected { & $complete @portalArguments } 'Wait for infrastructure'
+    $mockAzure.portalState = 'Succeeded'
+    $mockAzure.portalSubscription = 'another-subscription'
+    Assert-Rejected { & $complete @portalArguments } 'subscription does not match'
+    $mockAzure.portalSubscription = 'test-subscription'
+    $mockAzure.portalEnvironment = '..\outside'
+    Assert-Rejected { & $complete @portalArguments } 'Environment name must'
+    $mockAzure.portalEnvironment = 'test-environment'
+    $mockAzure.portalMissingOutput = $true
+    Assert-Rejected { & $complete @portalArguments } 'missing output functionName'
+    if ($mockAzure.completed.Count -ne 0) { throw 'An invalid portal deployment invoked publishing.' }
+
+    Write-Output 'PASS: validation gate, input drift, receipt invalidation, password exclusion, and portal completion/import/rejection checks.'
 } finally {
     $env:AZURE_OPERATOR_OBJECT_ID = $previousOperator
     $env:AZURE_ENVIRONMENT_NAME = $previousEnvironment

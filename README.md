@@ -10,6 +10,25 @@ registered, but sample 15 does **not** support calling this private MCP endpoint
 from its agent runtime. The workstation can reach and exercise the MCP server.
 Peering and creating a connection do not remove that service limitation.
 
+## Deploy to Azure
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgeorgeollis%2Ffoundry-connections%2Fmain%2Fazuredeploy.json)
+
+Deploy the infrastructure from Azure Portal, without running Bicep locally:
+
+1. Check the [permissions, providers, quota, and licensing prerequisites](docs/deployment.md#prerequisites).
+2. Click the button, choose your subscription, and enter a new environment name,
+   your Entra **user object ID**, and a strong VM administrator password. Keep the
+   regional/model defaults unless you intend to change them.
+3. Review the billable resources and select **Review + create**. After deployment
+   succeeds, copy its subscription deployment name and run the
+   [single completion command](docs/deployment.md#azure-portal-button).
+
+**The button provisions infrastructure, not the MCP application package.**
+The completion command publishes MCP from the private VM and verifies it.
+No public Function access is enabled. For scripted provisioning instead, use
+the [PowerShell quick start](#quick-start).
+
 ## Architecture
 
 ```mermaid
@@ -128,7 +147,10 @@ infra\
   modules\                   Network, access, Function, roles, MCP connection
   foundry\                   Trimmed, adapted upstream sample 15 modules
   sources.json               Pinned upstream source revisions
+azuredeploy.json             Generated, self-contained portal deployment template
 scripts\
+  Build-PortalTemplate.ps1    Regenerate the portal template from Bicep
+  Complete-PortalDeployment.ps1  Import portal outputs, publish MCP, verify
   Deploy.ps1                 Validate/what-if, provision, save outputs
   Publish-Mcp.ps1            Publish privately through the Windows VM
   Test-Deployment.ps1        Live networking, DNS, RBAC, and MCP checks
@@ -156,8 +178,9 @@ module layout, source revision, and license are retained.
   the VM, and model usage incur charges. Stopping the VM does not stop the other
   charges.
 
-All deployment state, credentials, logs, generated templates, and concrete
-environment identifiers stay in ignored local files under `.azure\`.
+All deployment state, credentials, logs, and concrete environment identifiers
+stay in ignored local files under `.azure\`. The published `azuredeploy.json`
+is compiled from Bicep without environment parameters or credentials.
 Documentation uses placeholders instead of deployed resource names.
 
 ## Attribution

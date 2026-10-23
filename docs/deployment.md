@@ -37,6 +37,60 @@ An earlier subscription required
 public IPs. The deployment script retains its feature check/registration and
 reports a pending registration rather than silently proceeding.
 
+## Azure Portal button
+
+The [Deploy to Azure button](../README.md#deploy-to-azure) opens a self-contained
+ARM template in Azure Portal. The template's schema selects **subscription
+scope**, and the template creates its own resource group.
+
+Use a new environment name containing 3-40 lowercase letters, numbers, or
+hyphens. Supply your Microsoft Entra **user object ID in the target tenant**,
+not an email address or tenant ID. Find it in your Entra user profile, or run:
+
+```powershell
+az account set --subscription '<subscription-id>'
+az ad signed-in-user show --query id --output tsv
+```
+
+Enter the VM administrator password in the portal's secure password field and
+store it safely. Unlike the PowerShell provisioning path, portal deployment
+does not create a local DPAPI credential file. Owner or equivalent permissions,
+resource providers, quotas, licensing, and the Bastion public-HTTPS exception
+still apply. The local CLI validation receipt is not used by Azure Portal;
+the portal performs its own review and ARM validation.
+
+After the subscription deployment succeeds, copy its deployment name from
+**Subscription > Deployments**. Clone this repository on a Windows machine with
+PowerShell 7.2+ and Azure CLI, sign in to Azure, and run:
+
+```powershell
+.\scripts\Complete-PortalDeployment.ps1 `
+    -SubscriptionId '<subscription-id>' `
+    -DeploymentName '<portal-deployment-name>'
+```
+
+This imports the actual outputs into the correct ignored environment directory,
+starts the VM if necessary, publishes the MCP package through the private VM
+using managed identity, and runs the existing live verification. It does not
+reprovision infrastructure or require your VM password.
+
+The infrastructure template alone does **not** publish the Function code, and
+registering the MCP connection does not remove sample 15's private-tool
+execution limitation.
+
+### Maintaining the button
+
+`azuredeploy.json` is generated from `infra\main.bicep`, not hand-edited. After
+changing Bicep, regenerate and commit it with:
+
+```powershell
+.\scripts\Build-PortalTemplate.ps1
+```
+
+The public raw-template URL contains no subscription identifiers, operator IDs,
+passwords, or environment-specific parameter values. Never build this artifact
+from local deployment parameters or copy ignored state into it.
+
 ## Configure and deploy
 
 Use the [README quick start](../README.md#quick-start). Change primary/Search
