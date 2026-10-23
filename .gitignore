@@ -1,0 +1,11 @@
+.azure/
+infra/**/*.json
+!infra/sources.json
+**/__pycache__/
+**/.python_packages/
+**/.venv/
+*.zip
+*.credential.xml
+.env
+.env.*
+!.env.example

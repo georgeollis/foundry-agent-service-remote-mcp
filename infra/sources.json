@@ -1,0 +1,16 @@
+{
+  "foundry": {
+    "repository": "https://github.com/microsoft-foundry/foundry-samples",
+    "commit": "7365f48656d4ff99ef2f48a41c56ad09e1d85f9e",
+    "path": "infrastructure/infrastructure-setup-bicep/15-private-network-standard-agent-setup"
+  },
+  "petInsurance": {
+    "repository": "https://github.com/Azure-Samples/AI-Gateway",
+    "commit": "1679e3137d2fe7592d2a668d77ff71550d35b69e",
+    "path": "labs/ai-foundry-toolbox/mcp-servers/pet-insurance"
+  },
+  "functionsInfrastructureReference": {
+    "repository": "https://github.com/Azure-Samples/remote-mcp-functions-python",
+    "ref": "refs/tags/v1.0.2"
+  }
+}
