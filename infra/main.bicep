@@ -118,6 +118,22 @@ module functions './modules/function.bicep' = {
   }
 }
 
+module openApi './modules/function.bicep' = {
+  name: 'pet-insurance-openapi'
+  scope: rg
+  params: {
+    location: location
+    suffix: suffix
+    tags: tags
+    workload: 'openapi'
+    functionAppName: 'func-openapi-${suffix}'
+    peSubnetId: network.outputs.functionPeSubnetId
+    integrationSubnetId: network.outputs.functionIntegrationSubnetId
+    deploymentVmPrincipalId: access.outputs.vmPrincipalId
+    operatorPrincipalId: operatorPrincipalId
+  }
+}
+
 module foundryUser './modules/foundry-user.bicep' = {
   name: 'foundry-operator'
   scope: rg
@@ -153,6 +169,10 @@ output bastionName string = access.outputs.bastionName
 output functionName string = functions.outputs.functionName
 output functionHostname string = functions.outputs.functionHostname
 output mcpEndpoint string = mcpServerEndpoint
+output openApiFunctionName string = openApi.outputs.functionName
+output openApiFunctionHostname string = openApi.outputs.functionHostname
+output openApiBaseUrl string = 'https://${openApi.outputs.functionHostname}/api'
+output openApiSpecUrl string = 'https://${openApi.outputs.functionHostname}/api/openapi.json'
 output foundryAccountName string = foundryName
 output foundryProjectName string = projectName
 output foundryProjectEndpoint string = 'https://${foundryName}.services.ai.azure.com/api/projects/${projectName}'

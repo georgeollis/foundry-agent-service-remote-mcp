@@ -1,0 +1,202 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Pet Insurance REST Demo",
+    "version": "1.0.0",
+    "description": "Simulated pet-insurance API for Microsoft Foundry OpenAPI tools. Use POLICY-001 (active), POLICY-002 (lapsed), and CLAIM-001. No real decisions or persistent changes are made. Anonymous access is restricted by an Azure private endpoint."
+  },
+  "servers": [
+    {
+      "url": "https://example.azurewebsites.net/api",
+      "description": "Replace with the deployed openApiBaseUrl, or import the exported deployment-specific spec."
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/policies/{policy_number}/coverage": {
+      "get": {
+        "operationId": "get_policy_coverage",
+        "summary": "Check a demo policy's coverage",
+        "description": "Use POLICY-001 for active coverage or POLICY-002 for a lapsed policy.",
+        "parameters": [
+          {
+            "name": "policy_number",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "POLICY-001"
+          },
+          {
+            "name": "service_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["wellness", "dental", "emergency"],
+              "default": "wellness"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Simulated policy coverage",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Coverage" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/claims/{claim_number}": {
+      "get": {
+        "operationId": "get_claim_status",
+        "summary": "Get a demo claim's status",
+        "description": "Use CLAIM-001 to retrieve an approved example claim.",
+        "parameters": [
+          {
+            "name": "claim_number",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "CLAIM-001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Simulated claim status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Claim" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/preauthorizations": {
+      "post": {
+        "operationId": "request_preauthorization",
+        "summary": "Request simulated treatment preauthorization",
+        "description": "Returns a demo approval or manual-review result. Does not persist requests or reserve policy limits.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PreauthorizationRequest" },
+              "example": {
+                "policy_number": "POLICY-001",
+                "service_type": "wellness",
+                "estimated_cost": 100
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Simulated preauthorization result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Preauthorization" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "415": {
+            "description": "Content-Type must be application/json",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Coverage": {
+        "type": "object",
+        "required": ["policy_number", "status", "service_type", "covered", "coverage_percentage", "annual_limit_remaining", "currency", "demo"],
+        "properties": {
+          "policy_number": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "lapsed"] },
+          "service_type": { "type": "string", "enum": ["wellness", "dental", "emergency"] },
+          "covered": { "type": "boolean" },
+          "coverage_percentage": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "annual_limit_remaining": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string", "enum": ["GBP"] },
+          "demo": { "type": "boolean", "enum": [true] }
+        },
+        "additionalProperties": false
+      },
+      "Claim": {
+        "type": "object",
+        "required": ["claim_number", "policy_number", "status", "amount", "currency", "demo"],
+        "properties": {
+          "claim_number": { "type": "string" },
+          "policy_number": { "type": "string" },
+          "status": { "type": "string", "enum": ["approved"] },
+          "amount": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string", "enum": ["GBP"] },
+          "demo": { "type": "boolean", "enum": [true] }
+        },
+        "additionalProperties": false
+      },
+      "PreauthorizationRequest": {
+        "type": "object",
+        "required": ["policy_number", "service_type", "estimated_cost"],
+        "properties": {
+          "policy_number": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "service_type": { "type": "string", "enum": ["wellness", "dental", "emergency"] },
+          "estimated_cost": { "type": "number", "minimum": 0, "exclusiveMinimum": true }
+        },
+        "additionalProperties": false
+      },
+      "Preauthorization": {
+        "type": "object",
+        "required": ["reference", "policy_number", "service_type", "status", "estimated_cost", "approved_amount", "currency", "demo"],
+        "properties": {
+          "reference": { "type": "string", "pattern": "^PA-[A-F0-9]{12}$" },
+          "policy_number": { "type": "string" },
+          "service_type": { "type": "string", "enum": ["wellness", "dental", "emergency"] },
+          "status": { "type": "string", "enum": ["approved", "manual_review"] },
+          "estimated_cost": { "type": "number", "minimum": 0, "exclusiveMinimum": true },
+          "approved_amount": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string", "enum": ["GBP"] },
+          "demo": { "type": "boolean", "enum": [true] }
+        },
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed or invalid request",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      },
+      "NotFound": {
+        "description": "Demo policy or claim not found",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      }
+    }
+  }
+}

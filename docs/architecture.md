@@ -12,6 +12,7 @@ inside the VNets from the managed services they expose.
 | Workstation to MCP | Peering routes HTTPS to the Function private endpoint |
 | Agent to dependencies | Network injection into the delegated agent subnet, then private endpoints |
 | Agent to MCP | Private HTTPS across VNet peering to the Function private endpoint |
+| Agent to OpenAPI | Private HTTPS across VNet peering to the separate REST Function private endpoint |
 | Function to storage | Outbound VNet integration, private Blob/Queue DNS and endpoints |
 | Workload to internet | Its own VNet's NAT gateway |
 | Monitoring | Azure Monitor Private Link Scope (AMPLS), private ingestion and query |
@@ -28,8 +29,8 @@ connectivity. The workstation NSG allows RDP only from the Bastion subnet.
 | Foundry | Private endpoints | `10.80.1.0/24` | Foundry, dependencies, and Monitor |
 | Foundry | Workstation | `10.80.2.0/24` | Windows VM, NSG, NAT A |
 | Foundry | Bastion | `10.80.3.0/26` | Required dedicated Bastion subnet |
-| MCP | Private endpoints | `10.81.0.0/24` | Function site and Blob/Queue |
-| MCP | Function integration | `10.81.1.0/24` | Delegated to `Microsoft.App/environments`; NAT B |
+| MCP / OpenAPI | Private endpoints | `10.81.0.0/24` | Two Function sites and each app's Blob/Queue |
+| MCP / OpenAPI | Function integration | `10.81.1.0/24` | Shared by both apps; delegated to `Microsoft.App/environments`; NAT B |
 
 The VNet address spaces are `10.80.0.0/16` and `10.81.0.0/16`.
 Check for overlap before connecting this environment to other networks.
@@ -46,8 +47,9 @@ zone visible to the peer. Automatic VM registration is disabled.
 | Monitor | `privatelink.monitor.azure.com`, `privatelink.oms.opinsights.azure.com`, `privatelink.ods.opinsights.azure.com`, `privatelink.agentsvc.azure-automation.net` |
 | Function | `privatelink.azurewebsites.net`, `privatelink.queue.core.windows.net` |
 
-There are nine private endpoints: Foundry, Foundry Blob, Cosmos DB, Search,
-registry, Monitor, Function site, Function Blob, and Function Queue.
+There are twelve private endpoints: Foundry, Foundry Blob, Cosmos DB, Search,
+registry, Monitor, plus separate site, Blob, and Queue endpoints for each of
+the MCP and OpenAPI Functions. Both apps reuse the existing thirteen DNS zones.
 
 The shared Blob zone is also attached to the **Monitor private endpoint's DNS
 zone group**. Merely linking that zone to the VNet does not populate Monitor's
@@ -62,8 +64,8 @@ Foundry VNet. This regional split is configurable, not a promise of capacity.
 
 | Identity | Access |
 |---|---|
-| Function user-assigned identity | Blob Data Owner and Queue Data Contributor on Function storage |
-| VM system-assigned identity | Website Contributor on the Function, for private publishing |
+| Each Function's user-assigned identity | Blob Data Owner and Queue Data Contributor on its own storage account |
+| VM system-assigned identity | Website Contributor on each Function, for private publishing |
 | Operator | Foundry User on the account, VM Administrator Login on the VM, Blob Reader on Function storage |
 | Foundry project identity | Scoped Storage, Search, Cosmos DB, registry pull, and monitoring roles from sample 15 |
 
@@ -76,6 +78,12 @@ The Foundry MCP connection is declared at account and project scope to mirror
 the portal-created configuration. Its URL is derived from the Function hostname.
 The newer connection API supports the `RemoteTool` category; the upstream agent
 infrastructure otherwise retains its original APIs.
+
+The REST API is a separate Function, FC1 plan, storage account, and managed
+identity. It shares the tools VNet, integration subnet, NAT gateway, and DNS
+zones with MCP. Anonymous HTTP is intentional for this private-network demo;
+it is not suitable as authorization for sensitive data. An anonymous OpenAPI
+project connection is configured when importing the tool in Foundry.
 
 ## Monitoring and egress
 

@@ -16,7 +16,8 @@ if ($deployment.properties.provisioningState -ne 'Succeeded') {
 $outputs = $deployment.properties.outputs
 foreach ($name in @('subscriptionId', 'deployedEnvironmentName', 'resourceGroupName', 'vmName',
     'functionName', 'functionHostname', 'mcpEndpoint', 'foundryProjectEndpoint',
-    'foundryAccountName', 'foundryProjectName', 'foundryVnetName', 'functionVnetName', 'tenantId')) {
+    'foundryAccountName', 'foundryProjectName', 'foundryVnetName', 'functionVnetName', 'tenantId',
+    'openApiFunctionName', 'openApiFunctionHostname', 'openApiBaseUrl', 'openApiSpecUrl')) {
     if ([string]::IsNullOrWhiteSpace($outputs.$name.value)) {
         throw "Not a complete Foundry Agent Service Remote MCP deployment: missing output $name."
     }
@@ -32,7 +33,8 @@ New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 $outputsPath = Join-Path $stateDirectory 'deployment-outputs.json'
 $outputs | ConvertTo-Json -Depth 10 | Set-Content $outputsPath
 
-& (Join-Path $PSScriptRoot 'Publish-Mcp.ps1') -SubscriptionId $SubscriptionId -OutputsPath $outputsPath
+& (Join-Path $PSScriptRoot 'Publish-Functions.ps1') -SubscriptionId $SubscriptionId -OutputsPath $outputsPath
 & (Join-Path $PSScriptRoot 'Test-Deployment.ps1') -SubscriptionId $SubscriptionId -OutputsPath $outputsPath
 Write-Output "Foundry: $($outputs.foundryProjectEndpoint.value)"
 Write-Output "MCP: $($outputs.mcpEndpoint.value)"
+Write-Output "OpenAPI: $($outputs.openApiSpecUrl.value)"

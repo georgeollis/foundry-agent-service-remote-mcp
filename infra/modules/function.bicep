@@ -5,15 +5,17 @@ param peSubnetId string
 param integrationSubnetId string
 param deploymentVmPrincipalId string
 param operatorPrincipalId string
+param workload string = 'mcp'
+param functionAppName string = 'func-pet-${suffix}'
 
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-mcp-${suffix}'
+  name: 'id-${workload}-${suffix}'
   location: location
   tags: tags
 }
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: 'stmcp${suffix}'
+  name: 'st${workload}${suffix}'
   location: location
   tags: tags
   kind: 'StorageV2'
@@ -46,7 +48,7 @@ var storageEndpointGroups = ['blob', 'queue']
 
 resource storageEndpoints 'Microsoft.Network/privateEndpoints@2024-05-01' = [
   for group in storageEndpointGroups: {
-    name: 'pe-mcp-${group}-${suffix}'
+    name: 'pe-${workload}-${group}-${suffix}'
     location: location
     tags: tags
     properties: {
@@ -102,7 +104,7 @@ resource storageRbac 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
 ]
 
 resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
-  name: 'plan-mcp-${suffix}'
+  name: 'plan-${workload}-${suffix}'
   location: location
   tags: tags
   kind: 'functionapp'
@@ -114,7 +116,7 @@ resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
 }
 
 resource app 'Microsoft.Web/sites@2024-04-01' = {
-  name: 'func-pet-${suffix}'
+  name: functionAppName
   location: location
   tags: tags
   kind: 'functionapp,linux'
@@ -194,14 +196,14 @@ resource operatorStorageRbac 'Microsoft.Authorization/roleAssignments@2022-04-01
 }
 
 resource endpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
-  name: 'pe-mcp-${suffix}'
+  name: 'pe-${workload}-${suffix}'
   location: location
   tags: tags
   properties: {
     subnet: { id: peSubnetId }
     privateLinkServiceConnections: [
       {
-        name: 'mcp'
+        name: workload
         properties: {
           privateLinkServiceId: app.id
           groupIds: ['sites']

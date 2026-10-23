@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "10537527331227531275"
+      "templateHash": "3163352968787623508"
     }
   },
   "parameters": {
@@ -4578,7 +4578,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "3926210408993243809"
+              "templateHash": "7677699900964303284"
             }
           },
           "parameters": {
@@ -4602,6 +4602,14 @@
             },
             "operatorPrincipalId": {
               "type": "string"
+            },
+            "workload": {
+              "type": "string",
+              "defaultValue": "mcp"
+            },
+            "functionAppName": {
+              "type": "string",
+              "defaultValue": "[format('func-pet-{0}', parameters('suffix'))]"
             }
           },
           "variables": {
@@ -4618,14 +4626,14 @@
             {
               "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
               "apiVersion": "2023-01-31",
-              "name": "[format('id-mcp-{0}', parameters('suffix'))]",
+              "name": "[format('id-{0}-{1}', parameters('workload'), parameters('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]"
             },
             {
               "type": "Microsoft.Storage/storageAccounts",
               "apiVersion": "2023-05-01",
-              "name": "[format('stmcp{0}', parameters('suffix'))]",
+              "name": "[format('st{0}{1}', parameters('workload'), parameters('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "kind": "StorageV2",
@@ -4647,20 +4655,20 @@
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices",
               "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}', format('stmcp{0}', parameters('suffix')), 'default')]",
+              "name": "[format('{0}/{1}', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
               ]
             },
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
               "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}/{2}', format('stmcp{0}', parameters('suffix')), 'default', 'deployment')]",
+              "name": "[format('{0}/{1}/{2}', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default', 'deployment')]",
               "properties": {
                 "publicAccess": "None"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmcp{0}', parameters('suffix')), 'default')]"
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default')]"
               ]
             },
             {
@@ -4670,7 +4678,7 @@
               },
               "type": "Microsoft.Network/privateEndpoints",
               "apiVersion": "2024-05-01",
-              "name": "[format('pe-mcp-{0}-{1}', variables('storageEndpointGroups')[copyIndex()], parameters('suffix'))]",
+              "name": "[format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
@@ -4681,7 +4689,7 @@
                   {
                     "name": "[variables('storageEndpointGroups')[copyIndex()]]",
                     "properties": {
-                      "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]",
+                      "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
                       "groupIds": [
                         "[variables('storageEndpointGroups')[copyIndex()]]"
                       ]
@@ -4690,7 +4698,7 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
               ]
             },
             {
@@ -4700,7 +4708,7 @@
               },
               "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
               "apiVersion": "2024-05-01",
-              "name": "[format('{0}/{1}', format('pe-mcp-{0}-{1}', variables('storageEndpointGroups')[copyIndex()], parameters('suffix')), 'default')]",
+              "name": "[format('{0}/{1}', format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix')), 'default')]",
               "properties": {
                 "privateDnsZoneConfigs": [
                   {
@@ -4712,7 +4720,7 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-mcp-{0}-{1}', variables('storageEndpointGroups')[copyIndex()], parameters('suffix')))]"
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix')))]"
               ]
             },
             {
@@ -4722,22 +4730,22 @@
               },
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix'))), variables('storageRoles')[copyIndex()])]",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), variables('storageRoles')[copyIndex()])]",
               "properties": {
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix'))), '2023-01-31').principalId]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), '2023-01-31').principalId]",
                 "principalType": "ServicePrincipal",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageRoles')[copyIndex()])]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix')))]",
-                "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
               ]
             },
             {
               "type": "Microsoft.Web/serverfarms",
               "apiVersion": "2024-04-01",
-              "name": "[format('plan-mcp-{0}', parameters('suffix'))]",
+              "name": "[format('plan-{0}-{1}', parameters('workload'), parameters('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "kind": "functionapp",
@@ -4752,18 +4760,18 @@
             {
               "type": "Microsoft.Web/sites",
               "apiVersion": "2024-04-01",
-              "name": "[format('func-pet-{0}', parameters('suffix'))]",
+              "name": "[parameters('functionAppName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "kind": "functionapp,linux",
               "identity": {
                 "type": "UserAssigned",
                 "userAssignedIdentities": {
-                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix'))))]": {}
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))))]": {}
                 }
               },
               "properties": {
-                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('plan-mcp-{0}', parameters('suffix')))]",
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}-{1}', parameters('workload'), parameters('suffix')))]",
                 "httpsOnly": true,
                 "publicNetworkAccess": "Disabled",
                 "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
@@ -4775,10 +4783,10 @@
                   "deployment": {
                     "storage": {
                       "type": "blobContainer",
-                      "value": "[format('{0}{1}', reference(resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix'))), '2023-05-01').primaryEndpoints.blob, 'deployment')]",
+                      "value": "[format('{0}{1}', reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.blob, 'deployment')]",
                       "authentication": {
                         "type": "UserAssignedIdentity",
-                        "userAssignedIdentityResourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix')))]"
+                        "userAssignedIdentityResourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]"
                       }
                     }
                   },
@@ -4798,24 +4806,24 @@
                     },
                     {
                       "name": "AzureWebJobsStorage__clientId",
-                      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix'))), '2023-01-31').clientId]"
+                      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), '2023-01-31').clientId]"
                     },
                     {
                       "name": "AzureWebJobsStorage__blobServiceUri",
-                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix'))), '2023-05-01').primaryEndpoints.blob]"
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.blob]"
                     },
                     {
                       "name": "AzureWebJobsStorage__queueServiceUri",
-                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix'))), '2023-05-01').primaryEndpoints.queue]"
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.queue]"
                     }
                   ]
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', format('stmcp{0}', parameters('suffix')), 'default', 'deployment')]",
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-mcp-{0}', parameters('suffix')))]",
-                "[resourceId('Microsoft.Web/serverfarms', format('plan-mcp-{0}', parameters('suffix')))]",
-                "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default', 'deployment')]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
                 "storageDnsGroups",
                 "storageRbac"
               ]
@@ -4823,35 +4831,35 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix')))]",
-              "name": "[guid(resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix'))), parameters('deploymentVmPrincipalId'), 'private-publish')]",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
+              "name": "[guid(resourceId('Microsoft.Web/sites', parameters('functionAppName')), parameters('deploymentVmPrincipalId'), 'private-publish')]",
               "properties": {
                 "principalId": "[parameters('deploymentVmPrincipalId')]",
                 "principalType": "ServicePrincipal",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
               ]
             },
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix'))), parameters('operatorPrincipalId'), 'storage-inspect')]",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), parameters('operatorPrincipalId'), 'storage-inspect')]",
               "properties": {
                 "principalId": "[parameters('operatorPrincipalId')]",
                 "principalType": "User",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', format('stmcp{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
               ]
             },
             {
               "type": "Microsoft.Network/privateEndpoints",
               "apiVersion": "2024-05-01",
-              "name": "[format('pe-mcp-{0}', parameters('suffix'))]",
+              "name": "[format('pe-{0}-{1}', parameters('workload'), parameters('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
@@ -4860,9 +4868,9 @@
                 },
                 "privateLinkServiceConnections": [
                   {
-                    "name": "mcp",
+                    "name": "[parameters('workload')]",
                     "properties": {
-                      "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix')))]",
+                      "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
                       "groupIds": [
                         "sites"
                       ]
@@ -4871,13 +4879,13 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
               ]
             },
             {
               "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
               "apiVersion": "2024-05-01",
-              "name": "[format('{0}/{1}', format('pe-mcp-{0}', parameters('suffix')), 'default')]",
+              "name": "[format('{0}/{1}', format('pe-{0}-{1}', parameters('workload'), parameters('suffix')), 'default')]",
               "properties": {
                 "privateDnsZoneConfigs": [
                   {
@@ -4889,18 +4897,405 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-mcp-{0}', parameters('suffix')))]"
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-{1}', parameters('workload'), parameters('suffix')))]"
               ]
             }
           ],
           "outputs": {
             "functionName": {
               "type": "string",
-              "value": "[format('func-pet-{0}', parameters('suffix'))]"
+              "value": "[parameters('functionAppName')]"
             },
             "functionHostname": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/sites', format('func-pet-{0}', parameters('suffix'))), '2024-04-01').defaultHostName]"
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2024-04-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'private-access')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'private-network')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "pet-insurance-openapi",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "suffix": {
+            "value": "[variables('suffix')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "workload": {
+            "value": "openapi"
+          },
+          "functionAppName": {
+            "value": "[format('func-openapi-{0}', variables('suffix'))]"
+          },
+          "peSubnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'private-network'), '2025-04-01').outputs.functionPeSubnetId.value]"
+          },
+          "integrationSubnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'private-network'), '2025-04-01').outputs.functionIntegrationSubnetId.value]"
+          },
+          "deploymentVmPrincipalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'private-access'), '2025-04-01').outputs.vmPrincipalId.value]"
+          },
+          "operatorPrincipalId": {
+            "value": "[parameters('operatorPrincipalId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "7677699900964303284"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "suffix": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "peSubnetId": {
+              "type": "string"
+            },
+            "integrationSubnetId": {
+              "type": "string"
+            },
+            "deploymentVmPrincipalId": {
+              "type": "string"
+            },
+            "operatorPrincipalId": {
+              "type": "string"
+            },
+            "workload": {
+              "type": "string",
+              "defaultValue": "mcp"
+            },
+            "functionAppName": {
+              "type": "string",
+              "defaultValue": "[format('func-pet-{0}', parameters('suffix'))]"
+            }
+          },
+          "variables": {
+            "storageEndpointGroups": [
+              "blob",
+              "queue"
+            ],
+            "storageRoles": [
+              "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
+              "974c5e8b-45b9-4653-ba55-5f855dd0fb88"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('id-{0}-{1}', parameters('workload'), parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[format('st{0}{1}', parameters('workload'), parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true,
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
+                "publicNetworkAccess": "Disabled",
+                "networkAcls": {
+                  "bypass": "None",
+                  "defaultAction": "Deny"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default', 'deployment')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default')]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "storageEndpoints",
+                "count": "[length(variables('storageEndpointGroups'))]"
+              },
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('peSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[variables('storageEndpointGroups')[copyIndex()]]",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+                      "groupIds": [
+                        "[variables('storageEndpointGroups')[copyIndex()]]"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "storageDnsGroups",
+                "count": "[length(variables('storageEndpointGroups'))]"
+              },
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "[variables('storageEndpointGroups')[copyIndex()]]",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}.core.windows.net', variables('storageEndpointGroups')[copyIndex()]))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-{1}-{2}', parameters('workload'), variables('storageEndpointGroups')[copyIndex()], parameters('suffix')))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "storageRbac",
+                "count": "[length(variables('storageRoles'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), variables('storageRoles')[copyIndex()])]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageRoles')[copyIndex()])]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2024-04-01",
+              "name": "[format('plan-{0}-{1}', parameters('workload'), parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "functionapp",
+              "sku": {
+                "name": "FC1",
+                "tier": "FlexConsumption"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2024-04-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))))]": {}
+                }
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "httpsOnly": true,
+                "publicNetworkAccess": "Disabled",
+                "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
+                "functionAppConfig": {
+                  "runtime": {
+                    "name": "python",
+                    "version": "3.12"
+                  },
+                  "deployment": {
+                    "storage": {
+                      "type": "blobContainer",
+                      "value": "[format('{0}{1}', reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.blob, 'deployment')]",
+                      "authentication": {
+                        "type": "UserAssignedIdentity",
+                        "userAssignedIdentityResourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]"
+                      }
+                    }
+                  },
+                  "scaleAndConcurrency": {
+                    "instanceMemoryMB": 2048,
+                    "maximumInstanceCount": 40
+                  }
+                },
+                "siteConfig": {
+                  "minTlsVersion": "1.2",
+                  "scmMinTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage__credential",
+                      "value": "managedidentity"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__clientId",
+                      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix'))), '2023-01-31').clientId]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__blobServiceUri",
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.blob]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__queueServiceUri",
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), '2023-05-01').primaryEndpoints.queue]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', format('st{0}{1}', parameters('workload'), parameters('suffix')), 'default', 'deployment')]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}-{1}', parameters('workload'), parameters('suffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+                "storageDnsGroups",
+                "storageRbac"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
+              "name": "[guid(resourceId('Microsoft.Web/sites', parameters('functionAppName')), parameters('deploymentVmPrincipalId'), 'private-publish')]",
+              "properties": {
+                "principalId": "[parameters('deploymentVmPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix'))), parameters('operatorPrincipalId'), 'storage-inspect')]",
+              "properties": {
+                "principalId": "[parameters('operatorPrincipalId')]",
+                "principalType": "User",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', format('st{0}{1}', parameters('workload'), parameters('suffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pe-{0}-{1}', parameters('workload'), parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('peSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[parameters('workload')]",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
+                      "groupIds": [
+                        "sites"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-{1}', parameters('workload'), parameters('suffix')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "sites",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurewebsites.net')]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-{1}', parameters('workload'), parameters('suffix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionName": {
+              "type": "string",
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionHostname": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2024-04-01').defaultHostName]"
             }
           }
         }
@@ -5095,6 +5490,22 @@
     "mcpEndpoint": {
       "type": "string",
       "value": "[format('https://{0}/runtime/webhooks/mcp', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'pet-insurance-mcp'), '2025-04-01').outputs.functionHostname.value)]"
+    },
+    "openApiFunctionName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'pet-insurance-openapi'), '2025-04-01').outputs.functionName.value]"
+    },
+    "openApiFunctionHostname": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'pet-insurance-openapi'), '2025-04-01').outputs.functionHostname.value]"
+    },
+    "openApiBaseUrl": {
+      "type": "string",
+      "value": "[format('https://{0}/api', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'pet-insurance-openapi'), '2025-04-01').outputs.functionHostname.value)]"
+    },
+    "openApiSpecUrl": {
+      "type": "string",
+      "value": "[format('https://{0}/api/openapi.json', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'pet-insurance-openapi'), '2025-04-01').outputs.functionHostname.value)]"
     },
     "foundryAccountName": {
       "type": "string",

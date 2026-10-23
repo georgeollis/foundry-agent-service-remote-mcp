@@ -27,8 +27,8 @@ foreach ($provider in $providers) {
 ```
 
 Allow for at least two Dsv5 vCPUs, two VNets, two NAT gateways, three Standard
-public IPs, nine private endpoints, two storage accounts, one Flex Consumption
-plan, the Foundry agent environment, Search, Cosmos DB, registry, and GPT-4.1
+public IPs, twelve private endpoints, three storage accounts, two Flex Consumption
+plans, the Foundry agent environment, Search, Cosmos DB, registry, and GPT-4.1
 GlobalStandard capacity 30. Inspect regional quota and effective Azure Policy
 before deployment; ARM validation does not guarantee physical capacity.
 
@@ -70,7 +70,7 @@ PowerShell 7.2+ and Azure CLI, sign in to Azure, and run:
 ```
 
 This imports the actual outputs into the correct ignored environment directory,
-starts the VM if necessary, publishes the MCP package through the private VM
+starts the VM if necessary, publishes both Function packages through the private VM
 using managed identity, and runs the existing live verification. It does not
 reprovision infrastructure or require your VM password.
 
@@ -134,6 +134,7 @@ Under `.azure\<subscription-id>\<environment-name>\`:
 | `what-if.json` | Deployment preview |
 | `deployment-outputs.json` | Actual resource identifiers and private service URLs |
 | `verification.json` | Live verification result |
+| `openapi.json` | Import-ready OpenAPI spec with this deployment's API server URL |
 
 The entire `.azure\` tree is ignored by Git, including historical plans and logs.
 Do not force-add it. A receipt is a local safety check, not signed attestation;
@@ -147,20 +148,65 @@ Foundry project URLs have the form
 MCP uses
 `https://<function-app>.azurewebsites.net/runtime/webhooks/mcp`.
 
-`Publish-Mcp.ps1` starts the VM when necessary and uses VM Run Command to publish
-the Function ZIP. Azure CLI is installed inside the VM if absent. The VM signs in
-using its managed identity; its Function-scoped role authorizes publishing.
+`Publish-Functions.ps1` starts the VM when necessary and uses VM Run Command to
+publish both Function ZIPs. Use `-Service OpenApi` or `-Service Mcp` to publish
+only one service; the default is `All`. `Publish-Mcp.ps1` remains an MCP-only
+compatibility command. Azure CLI is installed inside the VM if absent. The VM
+signs in using its managed identity; app-scoped roles authorize publishing.
 Temporary packages/scripts are removed. Workload public access is never enabled.
 
 Give publishing and verification the correct environment outputs path. Both
 scripts reject outputs from another subscription.
+
+## OpenAPI tool in Foundry
+
+The separate REST Function implements [this OpenAPI 3.0.3 specification](../src/pet-insurance-api/openapi.json).
+It uses anonymous HTTP authentication, but public workload access is disabled.
+Requests must reach the private endpoint through the connected private network.
+
+| Operation | Method and route (under `/api`) | Demo input |
+|---|---|---|
+| `get_policy_coverage` | `GET /policies/{policy_number}/coverage` | `POLICY-001` active; `POLICY-002` lapsed; optional `service_type=wellness` |
+| `get_claim_status` | `GET /claims/{claim_number}` | `CLAIM-001` |
+| `request_preauthorization` | `POST /preauthorizations` | JSON example below |
+
+```json
+{"policy_number":"POLICY-001","service_type":"wellness","estimated_cost":100}
+```
+
+All data is simulated. Preauthorization does not persist a request or reserve
+policy limits. Unknown policy/claim identifiers return 404; invalid input returns
+400; a non-JSON POST returns 415.
+
+After publishing, import `.azure\<subscription-id>\<environment-name>\openapi.json`.
+The publisher replaces the sample's generic server URL with the actual
+`openApiBaseUrl` output **only in this ignored copy**. Alternatively, open
+`https://<openapi-function-app>.azurewebsites.net/api/openapi.json` from the
+Bastion workstation to obtain the same deployment-specific API definition.
+The committed sample uses `https://example.azurewebsites.net/api`; do not import
+that URL unchanged for a live test.
+
+In Foundry, open your agent's **Tools > Custom > OpenAPI**:
+
+1. Enter a tool name and description, and choose **Anonymous** authentication.
+2. Create/select an **OpenAPI project connection** with anonymous authentication
+   and the API's base URL. This connection is required even without credentials;
+   do not use the existing MCP `RemoteTool` connection.
+3. Paste/import the deployment-specific OpenAPI JSON and create the tool.
+4. Ask: "Check wellness coverage for POLICY-001, then request preauthorization
+   for an estimated cost of 100." Or ask for the status of CLAIM-001.
+
+The agent uses the private network path; no public API access or function key is
+needed. See Microsoft's [OpenAPI tool guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/openapi).
 
 ## Verification
 
 `Test-Deployment.ps1` checks peering, NAT associations, approved private
 endpoints, both-VNet DNS links, private service/storage/monitoring access,
 Windows 11 without a public IP, and live managed-identity roles. It then runs
-private DNS and MCP initialization/list/tool-call checks inside the VM.
+private DNS, MCP initialization/list/tool-call checks, served OpenAPI validation,
+and all three REST operations anonymously inside the VM. It also verifies that
+invalid preauthorization input is rejected.
 
 The four simulated tools are `check_coverage`, `request_pre_auth`,
 `check_claim_status`, and `submit_claim_documents`.
@@ -171,6 +217,10 @@ For local source and validation-gate regression checks:
 az bicep build --file .\infra\main.bicep --stdout --only-show-errors > $null
 if ($LASTEXITCODE -ne 0) { throw 'Bicep compilation failed' }
 .\scripts\Test-Deploy.ps1
+
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r .\src\pet-insurance-api\requirements.txt -r .\tests\requirements.txt
+.\.venv\Scripts\python.exe -m unittest discover -s .\tests -p test_openapi.py
 ```
 
 ## Recovery and cleanup

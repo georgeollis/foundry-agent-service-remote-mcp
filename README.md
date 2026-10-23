@@ -2,8 +2,8 @@
 
 A reproducible development environment based on Microsoft Foundry **sample 15**:
 two peered virtual networks, private service endpoints, shared DNS, NAT egress,
-a Windows 11 workstation behind Azure Bastion, and a Python MCP server on Azure
-Functions Flex Consumption.
+a Windows 11 workstation behind Azure Bastion, and separate Python MCP and
+OpenAPI services on Azure Functions Flex Consumption.
 
 ## Deploy to Azure
 
@@ -19,33 +19,39 @@ Deploy the infrastructure from Azure Portal, without running Bicep locally:
    succeeds, copy its subscription deployment name and run the
    [single completion command](docs/deployment.md#azure-portal-button).
 
-**The button provisions infrastructure, not the MCP application package.**
-The completion command publishes MCP from the private VM and verifies it.
+**The button provisions infrastructure, not the Function application packages.**
+The completion command publishes both services from the private VM and verifies them.
 No public Function access is enabled. For scripted provisioning instead, use
 the [PowerShell quick start](#quick-start).
 
 ## Architecture
 
-The Foundry agent calls the private pet-insurance MCP server across the peered
-VNets. The Function's public workload access remains disabled.
+The Foundry agent calls private pet-insurance services using either MCP or an
+OpenAPI tool across the peered VNets. Both Functions disable public workload access.
 
 ```mermaid
 flowchart LR
     subgraph foundryVnet["Foundry VNet"]
         agent["Foundry agent<br/>Network-injected subnet"]
     end
-    subgraph mcpVnet["MCP VNet"]
-        endpoint["Function<br/>Private endpoint"]
+    subgraph mcpVnet["MCP / OpenAPI VNet"]
+        endpoint["MCP Function<br/>Private endpoint"]
+        apiEndpoint["OpenAPI Function<br/>Private endpoint"]
     end
     server["Pet-insurance MCP<br/>Functions Flex Consumption"]
+    apiServer["Pet-insurance REST API<br/>OpenAPI 3.0.3"]
 
     agent ==>|"MCP tool calls<br/>Private HTTPS over VNet peering"| endpoint
     endpoint ==>|"Private HTTPS"| server
+    agent ==>|"OpenAPI tool calls<br/>Private HTTPS over VNet peering"| apiEndpoint
+    apiEndpoint ==>|"Private HTTPS"| apiServer
 
     classDef agent fill:#DBEAFE,stroke:#1D4ED8,stroke-width:3px,color:#0F172A
     classDef mcp fill:#CCFBF1,stroke:#0F766E,stroke-width:3px,color:#0F172A
+    classDef api fill:#E0E7FF,stroke:#4338CA,stroke-width:3px,color:#0F172A
     class agent agent
     class endpoint,server mcp
+    class apiEndpoint,apiServer api
     style foundryVnet fill:#F8FAFC,stroke:#2563EB,stroke-width:2px
     style mcpVnet fill:#F0FDFA,stroke:#0F766E,stroke-width:2px
 ```
@@ -69,10 +75,11 @@ flowchart TB
             natA["NAT Gateway A"]:::egress
         end
 
-        subgraph mcpVnet["MCP VNet - 10.81.0.0/16"]
+        subgraph mcpVnet["MCP / OpenAPI VNet - 10.81.0.0/16"]
             mcpPe["MCP Function<br/>Private endpoint"]:::mcp
-            storagePe["Function Blob / Queue<br/>2 private endpoints"]:::endpoint
-            integration["Function outbound<br/>Integration subnet"]:::endpoint
+            apiPe["OpenAPI Function<br/>Private endpoint"]:::api
+            storagePe["MCP + OpenAPI Blob / Queue<br/>4 private endpoints"]:::endpoint
+            integration["Both Functions outbound<br/>Shared integration subnet"]:::endpoint
             natB["NAT Gateway B"]:::egress
         end
     end
@@ -82,7 +89,8 @@ flowchart TB
         dependencies["Foundry Storage / Cosmos DB / ACR<br/>AI Search in Norway East"]:::service
         monitor["Application Insights + Log Analytics<br/>Azure Monitor Private Link Scope"]:::service
         func["Pet-insurance MCP server<br/>Functions Flex Consumption - Python 3.12"]:::mcp
-        storage["Function Blob / Queue storage<br/>Managed identity access"]:::service
+        api["Pet-insurance REST API<br/>OpenAPI 3.0.3 - Python 3.12"]:::api
+        storage["Separate MCP / OpenAPI storage accounts<br/>Managed identity access"]:::service
     end
 
     internet["Public internet<br/>Outbound destinations only"]:::external
@@ -93,6 +101,9 @@ flowchart TB
     vm -->|"Administration / testing<br/>VNet peering"| mcpPe
     agent ==>|"MCP tool calls<br/>Private HTTPS over VNet peering"| mcpPe
     mcpPe ==>|"Private inbound HTTPS"| func
+    vm -->|"Administration / testing<br/>VNet peering"| apiPe
+    agent ==>|"OpenAPI tool calls<br/>Private HTTPS over VNet peering"| apiPe
+    apiPe ==>|"Private inbound HTTPS"| api
 
     foundryPe --> foundry
     foundry -->|"Agent network injection"| agent
@@ -102,6 +113,7 @@ flowchart TB
     monitorPe --> monitor
 
     func -->|"Outbound VNet integration"| integration
+    api -->|"Outbound VNet integration"| integration
     integration -->|"Private storage access"| storagePe
     storagePe --> storage
 
@@ -116,6 +128,7 @@ flowchart TB
 
     classDef agent fill:#DBEAFE,stroke:#1D4ED8,stroke-width:3px,color:#0F172A
     classDef mcp fill:#CCFBF1,stroke:#0F766E,stroke-width:3px,color:#0F172A
+    classDef api fill:#E0E7FF,stroke:#4338CA,stroke-width:3px,color:#0F172A
     classDef endpoint fill:#EFF6FF,stroke:#3B82F6,color:#0F172A
     classDef service fill:#F8FAFC,stroke:#64748B,color:#0F172A
     classDef access fill:#F3E8FF,stroke:#9333EA,color:#0F172A
@@ -128,13 +141,13 @@ flowchart TB
     style managed fill:#F8FAFC,stroke:#94A3B8,stroke-dasharray:5 5
 ```
 
-**Private MCP path:** Foundry agent -> VNet peering -> Function private endpoint
--> pet-insurance MCP server. The bold arrows highlight these tool calls; the
+**Private tool paths:** Foundry agent -> VNet peering -> the tool's Function
+private endpoint -> MCP server or REST API. The bold arrows highlight these tool calls; the
 workstation has a separate administration and testing path.
 
 The VNets are peered in both directions. Dashed arrows represent DNS links;
 orange nodes are outbound-only NAT gateways, one per VNet. Managed services sit
-outside the VNet boundaries: their **nine private endpoints** reside inside.
+outside the VNet boundaries: their **twelve private endpoints** reside inside.
 
 </details>
 
@@ -144,13 +157,16 @@ outside the VNet boundaries: their **nine private endpoints** reside inside.
 | Foundry | Standard agent setup, GPT-4.1, Entra authentication |
 | Access | Standard Bastion and Windows 11 Pro 24H2, Trusted Launch |
 | MCP | Python 3.12, Flex Consumption, four simulated insurance tools |
-| Networking | Two VNets, two NAT gateways, nine private endpoints |
+| OpenAPI | Separate Flex Function, OpenAPI 3.0.3, three simulated REST operations |
+| Networking | Two VNets, two NAT gateways, twelve private endpoints |
 | Name resolution | Thirteen private DNS zones, each linked to both VNets |
 | Monitoring | Private Azure Monitor ingestion and query |
 | Authentication | Managed identities and resource-scoped RBAC |
 
 See [networking and access](docs/architecture.md) for subnet, DNS, and identity
 details, and [deployment and operations](docs/deployment.md) for the full runbook.
+For the API contract and Foundry import steps, see
+[using the OpenAPI tool](docs/deployment.md#openapi-tool-in-foundry).
 
 ## Quick start
 
@@ -175,7 +191,7 @@ az account set --subscription $subscription
 .\scripts\Deploy.ps1 @deployment -Action Validate
 # Review .azure\<subscription-id>\<environment-name>\what-if.json.
 .\scripts\Deploy.ps1 @deployment -Action Deploy
-.\scripts\Publish-Mcp.ps1 -SubscriptionId $subscription -OutputsPath $outputs
+.\scripts\Publish-Functions.ps1 -SubscriptionId $subscription -OutputsPath $outputs
 .\scripts\Test-Deployment.ps1 -SubscriptionId $subscription -OutputsPath $outputs
 ```
 
@@ -199,12 +215,15 @@ infra\
 azuredeploy.json             Generated, self-contained portal deployment template
 scripts\
   Build-PortalTemplate.ps1    Regenerate the portal template from Bicep
-  Complete-PortalDeployment.ps1  Import portal outputs, publish MCP, verify
+  Complete-PortalDeployment.ps1  Import portal outputs, publish Functions, verify
   Deploy.ps1                 Validate/what-if, provision, save outputs
-  Publish-Mcp.ps1            Publish privately through the Windows VM
-  Test-Deployment.ps1        Live networking, DNS, RBAC, and MCP checks
+  Publish-Functions.ps1      Publish both services privately and export OpenAPI
+  Publish-Mcp.ps1            Compatibility command for MCP-only publishing
+  Test-Deployment.ps1        Live networking, DNS, RBAC, MCP, and REST checks
   Test-Deploy.ps1            Offline validation-gate regression checks
 src\pet-insurance\           Upstream sample MCP application
+src\pet-insurance-api\       REST Function and sample openapi.json
+tests\                      OpenAPI contract and HTTP handler tests
 docs\                       Architecture and deployment runbook
 ```
 
@@ -221,6 +240,8 @@ module layout, source revision, and license are retained.
 - The MCP connection uses `RemoteTool`, anonymous authentication, custom MCP
   metadata, and disabled sharing. The endpoint is anonymous **inside the private
   network**, not a production authorization boundary.
+- The REST API also uses anonymous HTTP authentication inside the private network.
+  Its OpenAPI spec contains no keys. Add authentication before using real data.
 - Pet-insurance tools return simulated data. This is a development/POC sample,
   not a production insurance service.
 - Bastion, NAT, Search, Cosmos DB, registry, private endpoints, storage, disks,

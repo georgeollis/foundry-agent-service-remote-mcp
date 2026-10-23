@@ -12,7 +12,9 @@ $mockAzure = [pscustomobject]@{
     portalSubscription = 'test-subscription'
     portalEnvironment = 'test-environment'
     portalMissingOutput = $false
+    portalMissingApi = $false
     completed = [Collections.Generic.List[string]]::new()
+    publishedApps = [Collections.Generic.List[string]]::new()
 }
 $previousOperator = $env:AZURE_OPERATOR_OBJECT_ID
 $previousEnvironment = $env:AZURE_ENVIRONMENT_NAME
@@ -54,8 +56,13 @@ function az {
                 foundryVnetName = @{ value = 'test-foundry-vnet' }
                 functionVnetName = @{ value = 'test-function-vnet' }
                 tenantId = @{ value = $mockAzure.tenant }
+                openApiFunctionName = @{ value = 'test-openapi-function' }
+                openApiFunctionHostname = @{ value = 'openapi.example.invalid' }
+                openApiBaseUrl = @{ value = 'https://openapi.example.invalid/api' }
+                openApiSpecUrl = @{ value = 'https://openapi.example.invalid/api/openapi.json' }
             }
             if ($mockAzure.portalMissingOutput) { $portalOutputs.Remove('functionName') }
+            if ($mockAzure.portalMissingApi) { $portalOutputs.Remove('openApiFunctionName') }
             return (@{
                 properties = @{
                     provisioningState = $mockAzure.portalState
@@ -64,6 +71,14 @@ function az {
             } | ConvertTo-Json -Depth 10)
         }
         '^feature show' { return 'Registered' }
+        '^vm get-instance-view' { return 'PowerState/running' }
+        '^vm run-command invoke' {
+            $scriptIndex = [array]::IndexOf($args, '--scripts') + 1
+            $remoteScript = Get-Content ($args[$scriptIndex].Substring(1)) -Raw
+            $appName = [regex]::Match($remoteScript, "--name '([^']+)'").Groups[1].Value
+            $mockAzure.publishedApps.Add($appName)
+            return '{"value":[{"message":"PRIVATE_FUNCTION_PUBLISH_SUCCEEDED"}]}'
+        }
         '^provider show' { return 'Registered' }
         '^deployment sub create' {
             $mockAzure.createdDeployments++
@@ -122,7 +137,7 @@ try {
 
     $complete = Join-Path $testRoot 'scripts\Complete-PortalDeployment.ps1'
     Copy-Item (Join-Path $PSScriptRoot 'Complete-PortalDeployment.ps1') $complete
-    Set-Content (Join-Path $testRoot 'scripts\Publish-Mcp.ps1') @'
+    Set-Content (Join-Path $testRoot 'scripts\Publish-Functions.ps1') @'
 param([string]$SubscriptionId, [string]$OutputsPath)
 $mockAzure.completed.Add('publish')
 '@
@@ -148,9 +163,37 @@ $mockAzure.completed.Add('verify')
     $mockAzure.portalEnvironment = 'test-environment'
     $mockAzure.portalMissingOutput = $true
     Assert-Rejected { & $complete @portalArguments } 'missing output functionName'
+    $mockAzure.portalMissingOutput = $false
+    $mockAzure.portalMissingApi = $true
+    Assert-Rejected { & $complete @portalArguments } 'missing output openApiFunctionName'
     if ($mockAzure.completed.Count -ne 0) { throw 'An invalid portal deployment invoked publishing.' }
 
-    Write-Output 'PASS: validation gate, input drift, receipt invalidation, password exclusion, and portal completion/import/rejection checks.'
+    Copy-Item (Join-Path $PSScriptRoot 'Publish-Functions.ps1') (Join-Path $testRoot 'scripts\Publish-Functions.ps1') -Force
+    Copy-Item (Join-Path $PSScriptRoot 'Publish-Mcp.ps1') (Join-Path $testRoot 'scripts\Publish-Mcp.ps1')
+    foreach ($directory in @('pet-insurance', 'pet-insurance-api')) {
+        New-Item -ItemType Directory -Path (Join-Path $testRoot "src\$directory") -Force | Out-Null
+        Set-Content (Join-Path $testRoot "src\$directory\function_app.py") '# Offline publishing fixture'
+    }
+    $sourceSpec = Join-Path $testRoot 'src\pet-insurance-api\openapi.json'
+    Copy-Item (Join-Path $root 'src\pet-insurance-api\openapi.json') $sourceSpec
+    $specHash = (Get-FileHash $sourceSpec).Hash
+    $outputsPath = Join-Path $state 'deployment-outputs.json'
+    $publishArguments = @{ SubscriptionId = 'test-subscription'; OutputsPath = $outputsPath }
+    & (Join-Path $testRoot 'scripts\Publish-Functions.ps1') @publishArguments -Service OpenApi | Out-Null
+    if (($mockAzure.publishedApps -join ',') -ne 'test-openapi-function') { throw 'OpenAPI-only publishing targeted the wrong app.' }
+    $exported = Get-Content (Join-Path $state 'openapi.json') -Raw | ConvertFrom-Json
+    if ($exported.servers[0].url -ne 'https://openapi.example.invalid/api') { throw 'Exported OpenAPI spec has the wrong server URL.' }
+    if ((Get-FileHash $sourceSpec).Hash -ne $specHash) { throw 'Publishing modified the committed sample specification.' }
+    & (Join-Path $testRoot 'scripts\Publish-Mcp.ps1') @publishArguments | Out-Null
+    if (($mockAzure.publishedApps -join ',') -ne 'test-openapi-function,test-function') { throw 'MCP compatibility publishing targeted the wrong app.' }
+    $mockAzure.publishedApps.Clear()
+    & (Join-Path $testRoot 'scripts\Publish-Functions.ps1') @publishArguments | Out-Null
+    if (($mockAzure.publishedApps -join ',') -ne 'test-function,test-openapi-function') { throw 'Default publishing did not target both Function apps.' }
+    Assert-Rejected {
+        & (Join-Path $testRoot 'scripts\Publish-Functions.ps1') -SubscriptionId 'another-subscription' -OutputsPath $outputsPath
+    } 'do not belong'
+
+    Write-Output 'PASS: validation gate, portal completion/rejection, private Function selection, MCP compatibility, and OpenAPI spec export.'
 } finally {
     $env:AZURE_OPERATOR_OBJECT_ID = $previousOperator
     $env:AZURE_ENVIRONMENT_NAME = $previousEnvironment

@@ -13,6 +13,9 @@ if ($outputs.subscriptionId.value -ne $SubscriptionId) {
     throw 'Deployment outputs do not belong to the requested subscription. Supply the correct OutputsPath.'
 }
 $group = $outputs.resourceGroupName.value
+if (-not $outputs.openApiFunctionName.value -or -not $outputs.openApiBaseUrl.value) {
+    throw 'OpenAPI outputs are missing. Deploy the updated infrastructure before full verification.'
+}
 
 function Invoke-Azure {
     param([string[]]$Arguments)
@@ -23,7 +26,7 @@ function Invoke-Azure {
 
 $resources = Invoke-Azure @('resource', 'list', '--resource-group', $group)
 $endpoints = Invoke-Azure @('network', 'private-endpoint', 'list', '--resource-group', $group)
-if ($endpoints.Count -ne 9) { throw "Expected nine private endpoints, found $($endpoints.Count)." }
+if ($endpoints.Count -ne 12) { throw "Expected twelve private endpoints, found $($endpoints.Count)." }
 foreach ($endpoint in $endpoints) {
     foreach ($connection in $endpoint.privateLinkServiceConnections) {
         if ($connection.privateLinkServiceConnectionState.status -ne 'Approved') {
@@ -37,6 +40,7 @@ foreach ($vnet in @($outputs.foundryVnetName.value, $outputs.functionVnetName.va
     if ($peers.Count -ne 1 -or $peers[0].peeringState -ne 'Connected') { throw "Peering not connected: $vnet" }
 }
 $zones = Invoke-Azure @('network', 'private-dns', 'zone', 'list', '--resource-group', $group)
+if ($zones.Count -ne 13) { throw "Expected thirteen shared private DNS zones, found $($zones.Count)." }
 $privateDnsHosts = @()
 foreach ($zone in $zones) {
     $links = Invoke-Azure @('network', 'private-dns', 'link', 'vnet', 'list', '--resource-group', $group, '--zone-name', $zone.name)
@@ -46,13 +50,18 @@ foreach ($zone in $zones) {
     $privateDnsHosts += $records.fqdn | ForEach-Object { $_.TrimEnd('.') }
 }
 
-$appId = "/subscriptions/$SubscriptionId/resourceGroups/$group/providers/Microsoft.Web/sites/$($outputs.functionName.value)"
-$appResource = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com$appId`?api-version=2024-04-01")
-$app = $appResource.properties
-if ($app.publicNetworkAccess -ne 'Disabled') { throw 'Function public access is not disabled.' }
-if ($app.virtualNetworkSubnetId -notmatch '/egress-subnet$') { throw 'Function outbound VNet integration is missing.' }
-$functionPlan = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com$($app.serverFarmId)?api-version=2024-04-01")
-if ($functionPlan.sku.name -ne 'FC1') { throw 'Function is not running on Flex Consumption.' }
+$applications = @(
+    foreach ($name in @($outputs.functionName.value, $outputs.openApiFunctionName.value)) {
+        $appId = "/subscriptions/$SubscriptionId/resourceGroups/$group/providers/Microsoft.Web/sites/$name"
+        $application = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com$appId`?api-version=2024-04-01")
+        $app = $application.properties
+        if ($app.publicNetworkAccess -ne 'Disabled') { throw "Function public access is not disabled: $name" }
+        if ($app.virtualNetworkSubnetId -notmatch '/egress-subnet$') { throw "Function outbound VNet integration is missing: $name" }
+        $functionPlan = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com$($app.serverFarmId)?api-version=2024-04-01")
+        if ($functionPlan.sku.name -ne 'FC1') { throw "Function is not running on Flex Consumption: $name" }
+        $application
+    }
+)
 $nats = Invoke-Azure @('network', 'nat', 'gateway', 'list', '--resource-group', $group)
 if ($nats.Count -ne 2) { throw 'Expected two NAT gateways.' }
 $foundryVnet = Invoke-Azure @('network', 'vnet', 'show', '--resource-group', $group, '--name', $outputs.foundryVnetName.value)
@@ -64,9 +73,11 @@ $functionEgress = $functionVnet.subnets | Where-Object { $_.name -eq 'egress-sub
 if (-not $functionEgress.natGateway.id) { throw 'Function NAT association is missing.' }
 $vm = Invoke-Azure @('vm', 'show', '--resource-group', $group, '--name', $outputs.vmName.value)
 if ($vm.storageProfile.imageReference.offer -ne 'windows-11') { throw 'VM image is not Windows 11.' }
-$deployRoles = Invoke-Azure @('role', 'assignment', 'list', '--scope', $appId,
-    '--assignee-object-id', $vm.identity.principalId, '--fill-principal-name', 'false')
-if ('Website Contributor' -notin $deployRoles.roleDefinitionName) { throw 'VM private-publishing role is missing.' }
+foreach ($application in $applications) {
+    $deployRoles = Invoke-Azure @('role', 'assignment', 'list', '--scope', $application.id,
+        '--assignee-object-id', $vm.identity.principalId, '--fill-principal-name', 'false')
+    if ('Website Contributor' -notin $deployRoles.roleDefinitionName) { throw "VM private-publishing role is missing: $($application.name)" }
+}
 foreach ($nicReference in $vm.networkProfile.networkInterfaces) {
     $nic = Invoke-Azure @('network', 'nic', 'show', '--ids', $nicReference.id)
     if ($nic.ipConfigurations.publicIPAddress) { throw 'VM has a public IP address.' }
@@ -93,16 +104,21 @@ foreach ($resource in ($resources | Where-Object { $_.type -in $privateTypes }))
 }
 $storage = Invoke-Azure @('storage', 'account', 'list', '--resource-group', $group)
 $identities = Invoke-Azure @('identity', 'list', '--resource-group', $group)
-$functionIdentity = $identities | Where-Object { $_.name.StartsWith('id-mcp-') }
-if (-not $functionIdentity.principalId) { throw 'Function managed identity is missing.' }
+$functionIdentities = @{}
+foreach ($workload in @('mcp', 'openapi')) {
+    $identity = $identities | Where-Object { $_.name.StartsWith("id-$workload-") }
+    if (-not $identity.principalId) { throw "Function managed identity is missing: $workload" }
+    $functionIdentities[$workload] = $identity.principalId
+}
 foreach ($account in $storage) {
     if ($account.allowBlobPublicAccess -ne $false -or $account.allowSharedKeyAccess -ne $false) {
         throw "Storage authentication invariant failed: $($account.name)"
     }
     if ($account.publicNetworkAccess -ne 'Disabled') { throw "Storage network access mismatch: $($account.name)" }
-    if ($account.name.StartsWith('stmcp')) {
+    $workload = @('mcp', 'openapi') | Where-Object { $account.name.StartsWith("st$_") }
+    if ($workload) {
         $roles = Invoke-Azure @('role', 'assignment', 'list', '--scope', $account.id,
-            '--assignee-object-id', $functionIdentity.principalId, '--fill-principal-name', 'false')
+            '--assignee-object-id', $functionIdentities[$workload], '--fill-principal-name', 'false')
         foreach ($role in @('Storage Blob Data Owner', 'Storage Queue Data Contributor')) {
             if ($role -notin $roles.roleDefinitionName) { throw "Function storage role missing: $role" }
         }
@@ -123,14 +139,17 @@ $cosmosRoles = Invoke-Azure @('cosmosdb', 'sql', 'role', 'assignment', 'list', '
     '--account-name', $cosmosAccount.name)
 if ($projectPrincipalId -notin $cosmosRoles.principalId) { throw 'Foundry Cosmos DB data-plane role is missing.' }
 
-$scmHostname = ($app.enabledHostNames | Where-Object { $_ -match '\.scm\.' } | Select-Object -First 1)
-if (-not $scmHostname) { throw 'SCM hostname is missing.' }
-$hosts = @($outputs.functionHostname.value, $scmHostname,
+$hosts = @(
     "$($outputs.foundryAccountName.value).services.ai.azure.com",
     "$($outputs.foundryAccountName.value).openai.azure.com",
     "$($outputs.foundryAccountName.value).cognitiveservices.azure.com")
+foreach ($application in $applications) {
+    $scmHostname = $application.properties.enabledHostNames | Where-Object { $_ -match '\.scm\.' } | Select-Object -First 1
+    if (-not $scmHostname) { throw "SCM hostname is missing: $($application.name)" }
+    $hosts += @($application.properties.defaultHostName, $scmHostname)
+}
 $hosts += $storage | ForEach-Object { ([uri]$_.primaryEndpoints.blob).DnsSafeHost }
-$hosts += $storage | Where-Object { $_.name.StartsWith('stmcp') } | ForEach-Object { ([uri]$_.primaryEndpoints.queue).DnsSafeHost }
+$hosts += $storage | Where-Object { $_.name.StartsWith('stmcp') -or $_.name.StartsWith('stopenapi') } | ForEach-Object { ([uri]$_.primaryEndpoints.queue).DnsSafeHost }
 $hosts += $resources | Where-Object { $_.type -eq 'Microsoft.Search/searchServices' } | ForEach-Object { "$($_.name).search.windows.net" }
 $hosts += $resources | Where-Object { $_.type -eq 'Microsoft.DocumentDB/databaseAccounts' } | ForEach-Object { "$($_.name).documents.azure.com" }
 $hosts += $resources | Where-Object { $_.type -eq 'Microsoft.ContainerRegistry/registries' } | ForEach-Object { "$($_.name).azurecr.io" }
@@ -190,9 +209,38 @@ foreach ($call in $calls) {
     Write-Output "MCP_TOOL_OK $($call.name)"
     $id++
 }
+$api = '__API_BASE_URL__'
+$spec = Invoke-RestMethod -Uri "$api/openapi.json" -UseBasicParsing -TimeoutSec 180
+if ($spec.openapi -ne '3.0.3' -or $spec.servers[0].url -ne $api) { throw 'Served OpenAPI spec does not match the deployment.' }
+$operations = @($spec.paths.PSObject.Properties | ForEach-Object {
+    $_.Value.PSObject.Properties | ForEach-Object { $_.Value.operationId }
+})
+foreach ($operation in @('get_policy_coverage', 'get_claim_status', 'request_preauthorization')) {
+    if ($operation -notin $operations) { throw "OpenAPI operation missing: $operation" }
+}
+if ($operations.Count -ne 3) { throw 'Expected three OpenAPI business operations.' }
+$coverage = Invoke-RestMethod -Uri "$api/policies/POLICY-001/coverage" -UseBasicParsing -TimeoutSec 180
+if (-not $coverage.covered -or $coverage.coverage_percentage -ne 80 -or -not $coverage.demo) { throw 'OpenAPI coverage check failed.' }
+Write-Output 'OPENAPI_OPERATION_OK get_policy_coverage'
+$claim = Invoke-RestMethod -Uri "$api/claims/CLAIM-001" -UseBasicParsing -TimeoutSec 180
+if ($claim.status -ne 'approved' -or $claim.claim_number -ne 'CLAIM-001') { throw 'OpenAPI claim check failed.' }
+Write-Output 'OPENAPI_OPERATION_OK get_claim_status'
+$preauth = Invoke-RestMethod -Uri "$api/preauthorizations" -Method Post -ContentType 'application/json' `
+    -Body '{"policy_number":"POLICY-001","service_type":"wellness","estimated_cost":100}' -UseBasicParsing -TimeoutSec 180
+if ($preauth.status -ne 'approved' -or $preauth.approved_amount -ne 80 -or -not $preauth.demo) { throw 'OpenAPI preauthorization check failed.' }
+Write-Output 'OPENAPI_OPERATION_OK request_preauthorization'
+try {
+    Invoke-WebRequest -Uri "$api/preauthorizations" -Method Post -ContentType 'application/json' `
+        -Body '{"policy_number":"POLICY-001","service_type":"wellness","estimated_cost":0}' -UseBasicParsing -TimeoutSec 180 | Out-Null
+    throw 'OpenAPI accepted an invalid estimated cost.'
+} catch [System.Net.WebException] {
+    if ([int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    Write-Output 'OPENAPI_INVALID_REQUEST_OK'
+}
 Write-Output 'PRIVATE_DEPLOYMENT_CHECK_SUCCEEDED'
 '@
-$script = $script.Replace('__HOSTS__', $hostJson).Replace('__ENDPOINT__', $outputs.mcpEndpoint.value)
+$script = $script.Replace('__HOSTS__', $hostJson).Replace('__ENDPOINT__', $outputs.mcpEndpoint.value).
+    Replace('__API_BASE_URL__', $outputs.openApiBaseUrl.value)
 $temporaryScript = Join-Path ([IO.Path]::GetTempPath()) ("test-mcp-{0}.ps1" -f [guid]::NewGuid())
 try {
     Set-Content $temporaryScript $script
@@ -209,6 +257,9 @@ try {
         managementPlane = 'Passed'
         privateDataPlane = 'Passed'
         mcpTools = 4
+        openApiOperations = 3
+        privateEndpoints = 12
+        privateDnsZones = 13
     }
     $report | ConvertTo-Json | Set-Content (Join-Path (Split-Path $OutputsPath) 'verification.json')
 } finally {
