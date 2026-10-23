@@ -26,64 +26,117 @@ the [PowerShell quick start](#quick-start).
 
 ## Architecture
 
+The Foundry agent calls the private pet-insurance MCP server across the peered
+VNets. The Function's public workload access remains disabled.
+
 ```mermaid
-flowchart TB
-    operator["Operator"]
-    internet["Public internet<br/>Outbound destinations"]
-    dns["13 shared private DNS zones<br/>Linked to both VNets"]
-
-    subgraph foundryVnet["Foundry VNet - 10.80.0.0/16"]
-        bastion["Standard Bastion<br/>Public HTTPS 443"]
-        vm["Windows 11 workstation<br/>No public IP"]
-        agent["Delegated agent subnet"]
-        foundryPe["Foundry private endpoint"]
-        dependencyPe["Storage / Cosmos / Search / ACR<br/>Private endpoints"]
-        monitorPe["Azure Monitor<br/>Private endpoint"]
-        natA["NAT gateway A"]
-        bastion -->|"Private RDP"| vm
-        vm -->|"Private HTTPS"| foundryPe
-        agent --> dependencyPe
-        agent --> monitorPe
-        agent --> natA
-        vm --> natA
+flowchart LR
+    subgraph foundryVnet["Foundry VNet"]
+        agent["Foundry agent<br/>Network-injected subnet"]
     end
-
-    subgraph mcpVnet["MCP VNet - 10.81.0.0/16"]
-        mcpPe["Function site private endpoint"]
-        storagePe["Blob and Queue<br/>Private endpoints"]
-        integration["Delegated Function<br/>integration subnet"]
-        natB["NAT gateway B"]
-        integration --> storagePe
-        integration --> natB
+    subgraph mcpVnet["MCP VNet"]
+        endpoint["Function<br/>Private endpoint"]
     end
+    server["Pet-insurance MCP<br/>Functions Flex Consumption"]
 
-    subgraph managed["Managed services - public workload access disabled"]
-        foundry["Microsoft Foundry<br/>Project and GPT-4.1"]
-        dependencies["Foundry Storage / Cosmos DB<br/>Search / Container Registry"]
-        monitor["Application Insights<br/>Log Analytics and AMPLS"]
-        func["Flex Consumption<br/>Pet-insurance MCP"]
-        storage["Function storage<br/>Managed identity"]
-    end
+    agent ==>|"MCP tool calls<br/>Private HTTPS over VNet peering"| endpoint
+    endpoint ==>|"Private HTTPS"| server
 
-    operator -->|"Public HTTPS - approved exception"| bastion
-    vm -->|"Private HTTPS across VNet peering"| mcpPe
-    agent -->|"Private MCP HTTPS across VNet peering"| mcpPe
-    foundryPe --> foundry
-    foundry -->|"Agent network injection"| agent
-    dependencyPe --> dependencies
-    monitorPe --> monitor
-    mcpPe --> func
-    func -->|"Outbound VNet integration"| integration
-    storagePe --> storage
-    natA --> internet
-    natB --> internet
-    dns -.-> foundryVnet
-    dns -.-> mcpVnet
+    classDef agent fill:#DBEAFE,stroke:#1D4ED8,stroke-width:3px,color:#0F172A
+    classDef mcp fill:#CCFBF1,stroke:#0F766E,stroke-width:3px,color:#0F172A
+    class agent agent
+    class endpoint,server mcp
+    style foundryVnet fill:#F8FAFC,stroke:#2563EB,stroke-width:2px
+    style mcpVnet fill:#F0FDFA,stroke:#0F766E,stroke-width:2px
 ```
 
-The VNets are peered in both directions. Managed services are shown outside the
-VNet boundaries: their **private endpoints**, not the services themselves, reside
-in the subnets.
+<details>
+<summary>Full architecture: private endpoints, administration, DNS, and NAT egress</summary>
+
+```mermaid
+flowchart TB
+    operator["Operator"]:::external
+    dns["Shared private DNS<br/>13 zones linked to both VNets"]:::dns
+
+    subgraph networks["Private network - Sweden Central"]
+        subgraph foundryVnet["Foundry VNet - 10.80.0.0/16"]
+            bastion["Standard Bastion"]:::access
+            vm["Windows 11 workstation<br/>No public IP"]:::access
+            agent["Foundry agent<br/>Network-injected agent subnet"]:::agent
+            foundryPe["Foundry<br/>Private endpoint"]:::endpoint
+            dependencyPe["Storage / Cosmos / Search / ACR<br/>4 private endpoints"]:::endpoint
+            monitorPe["Azure Monitor<br/>Private endpoint"]:::endpoint
+            natA["NAT Gateway A"]:::egress
+        end
+
+        subgraph mcpVnet["MCP VNet - 10.81.0.0/16"]
+            mcpPe["MCP Function<br/>Private endpoint"]:::mcp
+            storagePe["Function Blob / Queue<br/>2 private endpoints"]:::endpoint
+            integration["Function outbound<br/>Integration subnet"]:::endpoint
+            natB["NAT Gateway B"]:::egress
+        end
+    end
+
+    subgraph managed["Azure managed services - public workload access disabled"]
+        foundry["Microsoft Foundry<br/>Project + GPT-4.1"]:::service
+        dependencies["Foundry Storage / Cosmos DB / ACR<br/>AI Search in Norway East"]:::service
+        monitor["Application Insights + Log Analytics<br/>Azure Monitor Private Link Scope"]:::service
+        func["Pet-insurance MCP server<br/>Functions Flex Consumption - Python 3.12"]:::mcp
+        storage["Function Blob / Queue storage<br/>Managed identity access"]:::service
+    end
+
+    internet["Public internet<br/>Outbound destinations only"]:::external
+
+    operator -->|"Public HTTPS 443<br/>Bastion exception"| bastion
+    bastion -->|"Private RDP"| vm
+    vm -->|"Private HTTPS"| foundryPe
+    vm -->|"Administration / testing<br/>VNet peering"| mcpPe
+    agent ==>|"MCP tool calls<br/>Private HTTPS over VNet peering"| mcpPe
+    mcpPe ==>|"Private inbound HTTPS"| func
+
+    foundryPe --> foundry
+    foundry -->|"Agent network injection"| agent
+    agent --> dependencyPe
+    dependencyPe --> dependencies
+    agent --> monitorPe
+    monitorPe --> monitor
+
+    func -->|"Outbound VNet integration"| integration
+    integration -->|"Private storage access"| storagePe
+    storagePe --> storage
+
+    agent --> natA
+    vm --> natA
+    integration --> natB
+    natA -->|"Outbound only"| internet
+    natB -->|"Outbound only"| internet
+
+    dns -.-> foundryVnet
+    dns -.-> mcpVnet
+
+    classDef agent fill:#DBEAFE,stroke:#1D4ED8,stroke-width:3px,color:#0F172A
+    classDef mcp fill:#CCFBF1,stroke:#0F766E,stroke-width:3px,color:#0F172A
+    classDef endpoint fill:#EFF6FF,stroke:#3B82F6,color:#0F172A
+    classDef service fill:#F8FAFC,stroke:#64748B,color:#0F172A
+    classDef access fill:#F3E8FF,stroke:#9333EA,color:#0F172A
+    classDef egress fill:#FFF7ED,stroke:#EA580C,color:#0F172A
+    classDef dns fill:#F0FDF4,stroke:#16A34A,color:#0F172A
+    classDef external fill:#FFFFFF,stroke:#64748B,color:#0F172A
+    style networks fill:#FFFFFF,stroke:#CBD5E1
+    style foundryVnet fill:#F8FAFC,stroke:#2563EB,stroke-width:2px
+    style mcpVnet fill:#F0FDFA,stroke:#0F766E,stroke-width:2px
+    style managed fill:#F8FAFC,stroke:#94A3B8,stroke-dasharray:5 5
+```
+
+**Private MCP path:** Foundry agent -> VNet peering -> Function private endpoint
+-> pet-insurance MCP server. The bold arrows highlight these tool calls; the
+workstation has a separate administration and testing path.
+
+The VNets are peered in both directions. Dashed arrows represent DNS links;
+orange nodes are outbound-only NAT gateways, one per VNet. Managed services sit
+outside the VNet boundaries: their **nine private endpoints** reside inside.
+
+</details>
 
 | Component | Configuration |
 |---|---|
