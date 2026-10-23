@@ -82,8 +82,10 @@ infrastructure otherwise retains its original APIs.
 The REST API is a separate Function, FC1 plan, storage account, and managed
 identity. It shares the tools VNet, integration subnet, NAT gateway, and DNS
 zones with MCP. Anonymous HTTP is intentional for this private-network demo;
-it is not suitable as authorization for sensitive data. An anonymous OpenAPI
-project connection is configured when importing the tool in Foundry.
+it is not suitable as authorization for sensitive data. Bicep provisions a
+project-scoped `OpenAPI` connection with `authType: None`, the private API's base
+URL, and sharing disabled. Select that connection when importing the tool in
+Foundry; deploying the connection does not create or modify an agent.
 
 ## Monitoring and egress
 

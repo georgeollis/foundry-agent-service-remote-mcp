@@ -209,7 +209,7 @@ validation and deployment**. New environments default to `pet-insurance-mcp`.
 infra\
   main.bicep                  Subscription-scoped entrypoint
   main.bicepparam             Region and environment configuration
-  modules\                   Network, access, Function, roles, MCP connection
+  modules\                   Network, access, Function, roles, tool connections
   foundry\                   Trimmed, adapted upstream sample 15 modules
   sources.json               Pinned upstream source revisions
 azuredeploy.json             Generated, self-contained portal deployment template
@@ -241,6 +241,7 @@ module layout, source revision, and license are retained.
   metadata, and disabled sharing. The endpoint is anonymous **inside the private
   network**, not a production authorization boundary.
 - The REST API also uses anonymous HTTP authentication inside the private network.
+  Bicep provisions its anonymous OpenAPI project connection with sharing disabled.
   Its OpenAPI spec contains no keys. Add authentication before using real data.
 - Pet-insurance tools return simulated data. This is a development/POC sample,
   not a production insurance service.

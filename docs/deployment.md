@@ -189,8 +189,9 @@ that URL unchanged for a live test.
 In Foundry, open your agent's **Tools > Custom > OpenAPI**:
 
 1. Enter a tool name and description, and choose **Anonymous** authentication.
-2. Create/select an **OpenAPI project connection** with anonymous authentication
-   and the API's base URL. This connection is required even without credentials;
+2. Select the anonymous **OpenAPI project connection** provisioned by Bicep for
+   the API's base URL. Its full resource ID is the `foundryOpenApiConnectionId`
+   deployment output. This connection is required even without credentials;
    do not use the existing MCP `RemoteTool` connection.
 3. Paste/import the deployment-specific OpenAPI JSON and create the tool.
 4. Ask: "Check wellness coverage for POLICY-001, then request preauthorization
@@ -204,6 +205,8 @@ needed. See Microsoft's [OpenAPI tool guidance](https://learn.microsoft.com/azur
 `Test-Deployment.ps1` checks peering, NAT associations, approved private
 endpoints, both-VNet DNS links, private service/storage/monitoring access,
 Windows 11 without a public IP, and live managed-identity roles. It then runs
+checks on the anonymous OpenAPI project connection's category, target, metadata,
+and disabled sharing, followed by
 private DNS, MCP initialization/list/tool-call checks, served OpenAPI validation,
 and all three REST operations anonymously inside the VM. It also verifies that
 invalid preauthorization input is rejected.

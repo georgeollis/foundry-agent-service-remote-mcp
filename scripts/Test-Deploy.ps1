@@ -13,6 +13,7 @@ $mockAzure = [pscustomobject]@{
     portalEnvironment = 'test-environment'
     portalMissingOutput = $false
     portalMissingApi = $false
+    portalMissingConnection = $false
     completed = [Collections.Generic.List[string]]::new()
     publishedApps = [Collections.Generic.List[string]]::new()
 }
@@ -60,9 +61,11 @@ function az {
                 openApiFunctionHostname = @{ value = 'openapi.example.invalid' }
                 openApiBaseUrl = @{ value = 'https://openapi.example.invalid/api' }
                 openApiSpecUrl = @{ value = 'https://openapi.example.invalid/api/openapi.json' }
+                foundryOpenApiConnectionId = @{ value = '/test-project/connections/test-openapi' }
             }
             if ($mockAzure.portalMissingOutput) { $portalOutputs.Remove('functionName') }
             if ($mockAzure.portalMissingApi) { $portalOutputs.Remove('openApiFunctionName') }
+            if ($mockAzure.portalMissingConnection) { $portalOutputs.Remove('foundryOpenApiConnectionId') }
             return (@{
                 properties = @{
                     provisioningState = $mockAzure.portalState
@@ -166,6 +169,9 @@ $mockAzure.completed.Add('verify')
     $mockAzure.portalMissingOutput = $false
     $mockAzure.portalMissingApi = $true
     Assert-Rejected { & $complete @portalArguments } 'missing output openApiFunctionName'
+    $mockAzure.portalMissingApi = $false
+    $mockAzure.portalMissingConnection = $true
+    Assert-Rejected { & $complete @portalArguments } 'missing output foundryOpenApiConnectionId'
     if ($mockAzure.completed.Count -ne 0) { throw 'An invalid portal deployment invoked publishing.' }
 
     Copy-Item (Join-Path $PSScriptRoot 'Publish-Functions.ps1') (Join-Path $testRoot 'scripts\Publish-Functions.ps1') -Force

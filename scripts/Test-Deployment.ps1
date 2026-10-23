@@ -126,6 +126,17 @@ foreach ($account in $storage) {
 }
 
 $projectId = "/subscriptions/$SubscriptionId/resourceGroups/$group/providers/Microsoft.CognitiveServices/accounts/$($outputs.foundryAccountName.value)/projects/$($outputs.foundryProjectName.value)"
+$connectionId = $outputs.foundryOpenApiConnectionId.value
+if (-not $connectionId -or -not $connectionId.StartsWith("$projectId/connections/", [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OpenAPI connection output is missing or belongs to another project.'
+}
+$openApiConnection = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com${connectionId}?api-version=2025-06-01")
+$connection = $openApiConnection.properties
+if ($connection.category -ne 'OpenAPI' -or $connection.authType -ne 'None' -or
+    $connection.target -ne $outputs.openApiBaseUrl.value -or $connection.metadata.type -ne 'openapi' -or
+    $connection.isSharedToAll -ne $false) {
+    throw 'Foundry OpenAPI connection does not match the private anonymous API configuration.'
+}
 $project = Invoke-Azure @('rest', '--method', 'get', '--url', "https://management.azure.com$projectId`?api-version=2025-04-01-preview")
 $projectPrincipalId = $project.identity.principalId
 if (-not $projectPrincipalId) { throw 'Foundry project managed identity is missing.' }
@@ -258,6 +269,7 @@ try {
         privateDataPlane = 'Passed'
         mcpTools = 4
         openApiOperations = 3
+        openApiConnection = 'Passed'
         privateEndpoints = 12
         privateDnsZones = 13
     }

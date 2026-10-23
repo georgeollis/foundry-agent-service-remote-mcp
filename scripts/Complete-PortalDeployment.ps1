@@ -17,7 +17,8 @@ $outputs = $deployment.properties.outputs
 foreach ($name in @('subscriptionId', 'deployedEnvironmentName', 'resourceGroupName', 'vmName',
     'functionName', 'functionHostname', 'mcpEndpoint', 'foundryProjectEndpoint',
     'foundryAccountName', 'foundryProjectName', 'foundryVnetName', 'functionVnetName', 'tenantId',
-    'openApiFunctionName', 'openApiFunctionHostname', 'openApiBaseUrl', 'openApiSpecUrl')) {
+    'openApiFunctionName', 'openApiFunctionHostname', 'openApiBaseUrl', 'openApiSpecUrl',
+    'foundryOpenApiConnectionId')) {
     if ([string]::IsNullOrWhiteSpace($outputs.$name.value)) {
         throw "Not a complete Foundry Agent Service Remote MCP deployment: missing output $name."
     }

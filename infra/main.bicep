@@ -160,6 +160,19 @@ module foundryMcp './modules/mcp-connection.bicep' = {
   ]
 }
 
+module foundryOpenApi './modules/openapi-connection.bicep' = {
+  name: 'foundry-openapi-connection'
+  scope: rg
+  params: {
+    accountName: foundryName
+    projectName: projectName
+    apiBaseUrl: 'https://${openApi.outputs.functionHostname}/api'
+  }
+  dependsOn: [
+    foundry
+  ]
+}
+
 output subscriptionId string = subscription().subscriptionId
 output tenantId string = tenant().tenantId
 output deployedEnvironmentName string = environmentName
@@ -177,5 +190,6 @@ output foundryAccountName string = foundryName
 output foundryProjectName string = projectName
 output foundryProjectEndpoint string = 'https://${foundryName}.services.ai.azure.com/api/projects/${projectName}'
 output foundryMcpConnectionId string = foundryMcp.outputs.projectConnectionId
+output foundryOpenApiConnectionId string = foundryOpenApi.outputs.projectConnectionId
 output foundryVnetName string = network.outputs.foundryVnetName
 output functionVnetName string = network.outputs.functionVnetName
